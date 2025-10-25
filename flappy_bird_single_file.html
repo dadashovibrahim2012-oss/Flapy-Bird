@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Flappy Bird - Single File</title>
+  <style>
+    :root{background:#70c5ce}
+    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Helvetica,Arial}
+    .wrap{display:flex;align-items:center;justify-content:center;height:100vh}
+    canvas{background:linear-gradient(#70c5ce,#7bd2d9);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.15)}
+    .hint{position:fixed;left:16px;bottom:16px;background:rgba(255,255,255,0.9);padding:10px;border-radius:8px;font-size:14px}
+    .btn{display:inline-block;margin-left:8px;padding:6px 10px;background:#1ea;cursor:pointer;border-radius:6px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <canvas id="game" width="480" height="640" role="application" aria-label="Flappy bird game"></canvas>
+  </div>
+  <div class="hint">Kontroller: <strong>Space / Click / Tap</strong> ile zıpla. <span class="btn" id="restartBtn">Yenidən başla</span></div>
+
+  <script>
+    // --- Simple Flappy Bird clone (single-file) ---
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+
+    // Game state
+    let frames = 0;
+    let state = 'menu'; // 'menu' | 'playing' | 'over'
+    let score = 0;
+    let best = Number(localStorage.getItem('flappy_best') || 0);
+
+    // Bird
+    const bird = {
+      x: 80,
+      y: H/2,
+      w: 34,
+      h: 24,
+      vy: 0,
+      gravity: 0.5,
+      jump: -9,
+      rotation: 0
+    };
+
+    // Pipes
+    const pipeGap = 150;
+    const pipeWidth = 70;
+    const pipeSpeed = 2.2;
+    const pipes = [];
+
+    // Utilities
+    function rand(min,max){return Math.floor(Math.random()*(max-min+1))+min}
+
+    function reset(){
+      frames = 0; score = 0; pipes.length = 0;
+      bird.y = H/2; bird.vy = 0; bird.rotation = 0;
+      state = 'menu';
+    }
+
+    function spawnPipe(){
+      const topH = rand(60, H - pipeGap - 120);
+      pipes.push({x: W, top: topH, bottom: topH + pipeGap, passed: false});
+    }
+
+    // Input
+    function flap(){
+      if(state === 'menu'){
+        state = 'playing';
+      }
+      if(state === 'playing'){
+        bird.vy = bird.jump;
+      }
+      if(state === 'over'){
+        reset();
+      }
+    }
+
+    document.addEventListener('keydown', e=>{
+      if(e.code === 'Space') { e.preventDefault(); flap(); }
+    });
+    canvas.addEventListener('mousedown', e=>{ flap(); });
+    canvas.addEventListener('touchstart', e=>{ e.preventDefault(); flap(); }, {passive:false});
+    document.getElementById('restartBtn').addEventListener('click', ()=>{ reset(); });
+
+    // Collision
+    function collides(b, p){
+      // Bird rect
+      const bx = b.x, by = b.y, bw = b.w, bh = b.h;
+      // Top pipe rect
+      const topRect = {x: p.x, y: 0, w: pipeWidth, h: p.top};
+      const botRect = {x: p.x, y: p.bottom, w: pipeWidth, h: H - p.bottom};
+
+      function rectOverlap(a,b){
+        return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+      }
+
+      if(rectOverlap({x:bx,y:by,w:bw,h:bh}, topRect) || rectOverlap({x:bx,y:by,w:bw,h:bh}, botRect)) return true;
+      // ground
+      if(by + bh >= H - 20) return true;
+      if(by < 0) return true;
+      return false;
+    }
+
+    // Draw helpers
+    function drawBird(b){
+      ctx.save();
+      ctx.translate(b.x + b.w/2, b.y + b.h/2);
+      ctx.rotate(b.rotation);
+      // body
+      ctx.beginPath();
+      ctx.ellipse(0,0,b.w/2,b.h/2,0,0,Math.PI*2);
+      ctx.fillStyle = '#ffd54a';
+      ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = '#c18f12'; ctx.stroke();
+      // eye
+      ctx.beginPath(); ctx.arc(b.w/6, -2, 3, 0, Math.PI*2); ctx.fillStyle='#000'; ctx.fill();
+      ctx.restore();
+    }
+
+    function drawPipes(){
+      ctx.fillStyle = '#2fa85a';
+      pipes.forEach(p=>{
+        // top
+        ctx.fillRect(p.x, 0, pipeWidth, p.top);
+        // bottom
+        ctx.fillRect(p.x, p.bottom, pipeWidth, H - p.bottom);
+        // pipe rim
+        ctx.fillStyle = '#2c8f4e';
+        ctx.fillRect(p.x, p.top - 12, pipeWidth, 12);
+        ctx.fillRect(p.x, p.bottom, pipeWidth, 12);
+        ctx.fillStyle = '#2fa85a';
+      });
+    }
+
+    function drawGround(){
+      ctx.fillStyle = '#d6b370';
+      ctx.fillRect(0, H-20, W, 20);
+    }
+
+    function drawText(){
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 36px Arial'; ctx.textAlign = 'center';
+      if(state === 'menu'){
+        ctx.fillText('Flappy Bird', W/2, 140);
+        ctx.font = '18px Arial'; ctx.fillText('Space / Click / Tap — başlamaq üçün', W/2, 170);
+      } else if(state === 'playing'){
+        ctx.fillText(score, W/2, 80);
+      } else if(state === 'over'){
+        ctx.fillText('Oyun bitdi', W/2, 140);
+        ctx.font = '20px Arial'; ctx.fillText('Məğlub oldun — Yenidən bas', W/2, 170);
+        ctx.font = '28px Arial'; ctx.fillText('Skor: ' + score, W/2, 220);
+        ctx.font = '18px Arial'; ctx.fillText('Ən yaxşı: ' + best, W/2, 250);
+      }
+    }
+
+    // Game loop
+    function update(){
+      frames++;
+      // spawn pipes
+      if(state === 'playing' && frames % 90 === 0) spawnPipe();
+
+      if(state === 'playing'){
+        // physics
+        bird.vy += bird.gravity; bird.y += bird.vy;
+        bird.rotation = Math.max(-0.6, Math.min(1.2, bird.vy * 0.06));
+
+        // pipes move
+        for(let i = pipes.length -1; i>=0; i--){
+          const p = pipes[i];
+          p.x -= pipeSpeed;
+          // score when passed
+          if(!p.passed && p.x + pipeWidth < bird.x){ p.passed = true; score++; if(score > best){ best = score; localStorage.setItem('flappy_best', best); } }
+          // remove off-screen
+          if(p.x + pipeWidth < -50) pipes.splice(i,1);
+          // collision
+          if(collides(bird, p)) state = 'over';
+        }
+
+        // ground collision
+        if(bird.y + bird.h >= H - 20) state = 'over';
+      }
+
+      if(state === 'over'){
+        // let bird fall
+        bird.vy += bird.gravity; bird.y += bird.vy;
+        bird.rotation += 0.05;
+      }
+    }
+
+    function render(){
+      // clear
+      ctx.clearRect(0,0,W,H);
+      // background sky gradient already via canvas background
+
+      // clouds (simple)
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.beginPath(); ctx.ellipse(80 + (frames%200)/2, 80, 36, 20, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(200 + Math.sin(frames/60)*20, 60, 50, 26, 0, 0, Math.PI*2); ctx.fill();
+
+      // pipes
+      drawPipes();
+
+      // bird
+      drawBird(bird);
+
+      // ground
+      drawGround();
+
+      // ui text
+      drawText();
+    }
+
+    function loop(){ update(); render(); requestAnimationFrame(loop); }
+
+    // Start
+    reset(); loop();
+
+    // Helpful: pause when tab hidden
+    document.addEventListener('visibilitychange', ()=>{ if(document.hidden) { /* could pause */ } });
+
+    // Accessibility: focus canvas
+    canvas.tabIndex = 0; canvas.focus();
+  </script>
+</body>
+</html>
